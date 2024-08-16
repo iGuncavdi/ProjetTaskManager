@@ -1,39 +1,82 @@
 const express = require('express');
-const mongoose = require('mongoose');
-
+const path = require('path');
 const app = express();
-const port = 3000;
+app.use(express.urlencoded({ extended: true }));
+//mongodb connection
+const {MongoClient} = require('mongodb'); //importing MongoClient from mongodb
 
-// Middleware to parse JSON request bodies
-app.use(express.json());
 
-mongoose.connect('mongodb://127.0.0.1:27017/task-manager')
-    .then(() => {
-        console.log('Connected to MongoDB');
-    })
-    .catch((error) => {
-        console.error('Error connecting to MongoDB:', error);
-    });
 
-const Task = require('./models/Tasks'); // Ensure this path is correct
 
-// Define a route for GET requests to '/'
+
+const port = 9000;
+const host = 'http://127.0.0.1:' + port;
+
+app.listen(port, () => console.log(host));
+
+//mongodb connection
+const mongodbURL = 'mongodb://127.0.0.1:27017';
+const client = new MongoClient(mongodbURL); //mongodb object
+
+//Promise kullanıyor yani databasee async bir şekilde bağlanıyor
+async function connect(){
+    try{
+        const conn = await client.connect();
+        //now we need to select a database
+        const db = await conn.db('mydb');
+        const coll = await db.collection('tasks');
+        //const result = await coll.find().toArray();
+        //res.send(result);
+        return coll;
+    }catch(err){
+        console.log(err);
+    }
+    return;
+}
+
+
+
+
+//APIS
 app.get('/', (req, res) => {
-    res.send('Welcome to task manager!');
-});
+    res.send("hello baby");
+})
 
-// Task Creation Route
-app.post('/tasks', async (req, res) => {
+//DISPLAY TASKS
+app.get('/tasks', async (req, res) => {
     try {
-        const task = new Task(req.body);
-        await task.save();
-        res.status(201).send(task);
-    } catch (error) {
-        res.status(400).send(error);
+        const coll = await connect(); // Get the tasks collection
+        const tasks = await coll.find().toArray(); // Fetch all tasks
+        res.status(200).json(tasks); // Send tasks as JSON
+    } catch (err) {
+        console.error('Error fetching tasks:', err.message);
+        res.status(500).send('Error fetching tasks.');
     }
 });
 
-// Start the server listening on the specified port
-app.listen(port, () => {
-    console.log(`Server running at http://localhost:${port}/`);
+
+// Serve the form.html
+app.get('/create-task', (req, res) => {
+    res.sendFile(path.join(__dirname, 'form.html'));
 });
+
+//CREATE TASK
+app.post('/tasks', async (req, res) => {
+    try {
+        console.log(req.body); // Log the request body to check the received data
+        const coll = await connect();
+        const newTask = {
+            title: req.body.title,
+            description: req.body.description,
+            status: req.body.status,
+            createdAt: new Date()
+        };
+        const result = await coll.insertOne(newTask);
+        res.status(201).send(`Task created successfully with ID: ${result.insertedId}`);
+    } catch (err) {
+        console.error('Error creating task:', err.message);
+        res.status(500).send('Error creating task.');
+    }
+});
+
+
